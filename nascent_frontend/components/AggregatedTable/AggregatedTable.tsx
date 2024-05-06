@@ -25,7 +25,7 @@ const AggregatedTable = () => {
       date.setDate(date.getDate() + 1);
       setLastDay(date.toISOString());
     }
-    setDisplayedAddress(address)
+    setDisplayedAddress(address || "ALL ADDRESSES")
     fetchData(url, setAggregatedData, newLastDayIncrement, "day", console.error);
   }
 

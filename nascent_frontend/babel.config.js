@@ -5,6 +5,7 @@ module.exports = {
         node: 'current', // Target the current version of Node
       }
     }],
-    '@babel/preset-react' // Add this to handle JSX
+    '@babel/preset-react', // Add this to handle JSX
+    '@babel/preset-env' // oddly need this for tests
   ],
 };

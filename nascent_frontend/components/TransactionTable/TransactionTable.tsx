@@ -24,7 +24,7 @@ const TransactionTable = () => {
       date.setMilliseconds(date.getMilliseconds() + 1);
       setLastTimestamp(date.toISOString());
     }
-    setDisplayedAddress(address)
+    setDisplayedAddress(address || "ALL ADDRESSES")
 
     fetchData(url, setTransactions, newLastTimeStampIncrement, "time_stamp", console.error);
   };
