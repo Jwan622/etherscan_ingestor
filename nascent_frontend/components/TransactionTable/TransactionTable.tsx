@@ -8,6 +8,7 @@ const TransactionTable = () => {
   const [transactions, setTransactions] = useState([]);
   const initialTimestamp = '2021-05-04T20:20:00Z';
   const [lastTimestamp, setLastTimestamp] = useState(initialTimestamp);
+  const [displayedAddress, setDisplayedAddress] = useState("ALL ADDRESSES")
 
   useEffect(() => {
     const url = `/api/transactions?limit=500&timestamp=${encodeURIComponent(lastTimestamp)}`;
@@ -23,13 +24,14 @@ const TransactionTable = () => {
       date.setMilliseconds(date.getMilliseconds() + 1);
       setLastTimestamp(date.toISOString());
     }
+    setDisplayedAddress(address)
 
     fetchData(url, setTransactions, newLastTimeStampIncrement, "time_stamp", console.error);
   };
 
   return (
     <>
-      <h1>Row by Row Table Involving Account: </h1>
+      <h1>Row by Row Table Involving Account: {displayedAddress}</h1>
       <div className={styles.searchContainer}>
         <DualFieldSearchBar onSubmit={(params) => handleSearch(params.timestamp, params.address)}/>
       </div>

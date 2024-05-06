@@ -10,6 +10,7 @@ const AggregatedTable = () => {
   const [aggregatedData, setAggregatedData] = useState([]);
   const initialDay = '2021-05-04';
   const [lastDay, setLastDay] = useState(initialDay);
+  const [displayedAddress, setDisplayedAddress] = useState('ALL ADDRESSES')
 
 
   useEffect(() => {
@@ -25,12 +26,13 @@ const AggregatedTable = () => {
       date.setDate(date.getDate() + 1);
       setLastDay(date.toISOString());
     }
+    setDisplayedAddress(address)
     fetchData(url, setAggregatedData, newLastDayIncrement, "day", console.error);
   }
 
   return (
     <>
-      <h1>Aggregations involving account:</h1>
+      <h1>Aggregations involving account: {displayedAddress}</h1>
       <div className={styles.searchContainer}>
         <DualFieldSearchBar onSubmit={(params) => handleAggregatedSearch({timestamp: params.timestamp, address: params.address})}/>
       </div>
