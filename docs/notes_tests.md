@@ -4,6 +4,8 @@ Damn you pytest. Standard gotchas again... imports driving you insane and mockin
 
 I tested the database with a fake test database and then also tested it by just testing the messages sent to the API. Depending on what philosphy you guys have, can do either one.
 
+The frontend tests are minimal... and man was setting up babel and jest annoying lol. But I would def add more.
+
 ## Fixtures
 
 

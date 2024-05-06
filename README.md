@@ -81,6 +81,12 @@ yarn
 yarn dev
 ```
 
+to run yarn tests:
+
+```bash
+yarn test
+```
+
 which should get the next.js project up and running on `localhost:3000` and it connects to the postgres database.
 
 **(Sorry getting up and running with this might involve downloading node and npx and I'm unwilling to uninstall both on my machine lol)**
