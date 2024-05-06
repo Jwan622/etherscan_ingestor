@@ -1,13 +1,22 @@
 module.exports = {
-  setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect'],
-  testEnvironment: 'jsdom', // important for testing components that interact with the DOM
-  testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  testEnvironment: 'jsdom',
   transform: {
-    // Use babel-jest to transform JS and JSX files
-    '^.+\\.(js|jsx|ts|tsx)$': '<rootDir>/node_modules/babel-jest',
+    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest', // Transform JavaScript and JSX files
   },
+  setupFilesAfterEnv: ['@testing-library/jest-dom'],
   moduleNameMapper: {
-    // Mock static assets
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy'
-  }
+    '\\.(css|less|scss|sass)$': 'identity-obj-proxy', // Mock style imports
+    '\\.(jpg|jpeg|png|gif|webp|svg)$': '<rootDir>/__mocks__/fileMock.js' // Mock image and asset imports
+  },
+  roots: [
+    "<rootDir>",
+    "components",
+    "pages"
+  ],
+  modulePaths: [
+    "<rootDir>"
+  ],
+  moduleDirectories: [
+    "node_modules"
+  ]
 };

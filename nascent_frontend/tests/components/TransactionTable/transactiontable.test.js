@@ -1,8 +1,10 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import TransactionTable from './TransactionTable';
+import TransactionTable from '../../../components/TransactionTable/TransactionTable';
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
+import { act } from 'react-dom/test-utils';
+
 
 const mock = new MockAdapter(axios);
 const mockData = Array.from({ length: 10 }, (_, index) => ({
@@ -15,16 +17,31 @@ const mockData = Array.from({ length: 10 }, (_, index) => ({
   time_stamp: `2021-05-04T20:20:${index}Z`
 }));
 
-mock.onGet("/api/transactions").reply(200, mockData);
+
 
 describe('TransactionTable', () => {
-  test('displays the default heading "Row by Row Involving ALL ACCOUNTS"', () => {
-    render(<TransactionTable />);
-    expect(screen.getByText("Row by Row Involving ALL ACCOUNTS")).toBeInTheDocument();
+  beforeEach(() => {
+    mock.onGet("/api/transactions?limit=500&timestamp=2021-05-04T20%3A20%3A00Z").reply(200, mockData);
   });
 
-  test('has exactly 6 headers in the table', () => {
-    render(<TransactionTable />);
+  afterEach(() => {
+    mock.reset();
+  });
+
+
+  it('displays the default heading "Row by Row Table Involving ALL ADDRESSES"', async () => {
+    await act(async () => {
+      render(<TransactionTable />);
+    });
+
+
+    expect(screen.getByText("Row by Row Table Involving ALL ADDRESSES")).toBeInTheDocument();
+  });
+
+  it('has exactly 6 headers in the table', async () => {
+    await act(async () => {
+      render(<TransactionTable />);
+    });
 
     const headers = screen.getAllByRole('columnheader');
 
