@@ -1,0 +1,15 @@
+version: '3.7'
+services:
+  postgres:
+    image: library/postgres
+    restart: unless-stopped
+    ports:
+    - 5434:5432/tcp
+    environment:
+    - POSTGRES_PASSWORD=nascentengineer
+    - POSTGRES_USER=postgres
+    - POSTGRES_DB=postgres
+
+    hostname: postgres
+    volumes:
+    - ./pgdata/data:/var/lib/postgresql/data

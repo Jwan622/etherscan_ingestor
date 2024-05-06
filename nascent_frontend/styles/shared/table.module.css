@@ -1,0 +1,33 @@
+.tableHeader {
+  background-color: #f3f4d2;
+  color: #1f2937;
+  border-bottom: 4px solid #d1d5db;
+}
+
+.th {
+  padding: 15px 15px;
+  border-right: 4px solid #e5e7fb;
+  border-top: 4px solid #e5e7fb;
+}
+
+.tr {
+  transition: background-color 0.8s ease
+}
+
+.tr:hover {
+  background-color: #e5e7eb;
+}
+
+.td {
+  padding: 10px 15px;
+  border-bottom: 4px solid #e5e7eb;
+  border-right: 4px solid #e5e7eb;
+}
+
+.tableContainer {
+  width: 80%;
+}
+
+.th, .td {
+  min-width: 13.6vw;
+}

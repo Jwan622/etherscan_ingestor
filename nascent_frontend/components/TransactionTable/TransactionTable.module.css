@@ -1,0 +1,26 @@
+.searchContainer {
+  width: 50%;
+  margin-bottom: 20px;
+}
+
+.buttonGroup {
+  position: absolute;
+  right: 300px;
+  top: 90px;
+  display: flex;
+  gap: 20px;
+}
+
+.resetButton, .loadMoreButton {
+  background-color: #28a745;
+  color: black;
+  border: black;
+  padding: 15px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 1s;
+}
+
+.resetButton:hover, .loadMoreButton:hover {
+  background-color: #218838;
+}

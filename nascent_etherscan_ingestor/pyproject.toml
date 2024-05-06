@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "nascent_etherscan_ingestor"
+version = "0.1.0"
+description = "jeff wan takehome for nascent"
+authors = ["Jeffrey <jwan622@gmail.com>"]
+readme = "README.md"
+
+
+[[tool.poetry.packages]]
+include = "assignment"
+from = "src"
+
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-dotenv = "^1.0.1"
+SQLAlchemy = "1.4.0"
+pandas = "^2.2.2"
+psycopg = "^3.1.18"
+typer = "^0.12.3"
+requests = "^2.31.0"
+psycopg2 = "^2.9.9"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+black = "^24.4.2"
+flake8 = "^7.0.0"
+pytest-mock = "^3.14.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+crawl-and-ingest = "src.assignment.ingest:crawl_and_ingest"
