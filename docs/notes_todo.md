@@ -37,3 +37,7 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [ ] some graphical libraries. chart.js?
 - [ ] caching in the server using redis, cache on address and datetime/timestamp. invalidate cache when it holds too many records FIFO style.
 - [ ] display the address that we're focusing on in the header
+
+
+## Todo General
+- [ ] docker compose everything.
