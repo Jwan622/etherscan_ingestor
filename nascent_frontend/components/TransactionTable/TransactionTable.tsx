@@ -31,7 +31,7 @@ const TransactionTable = () => {
 
   return (
     <>
-      <h1>Row by Row Table Involving Account: {displayedAddress}</h1>
+      <h1>Row by Row Table Involving {displayedAddress == "ALL ADDRESSES" ? displayedAddress : "Account: " + displayedAddress}</h1>
       <div className={styles.searchContainer}>
         <DualFieldSearchBar onSubmit={(params) => handleSearch(params.timestamp, params.address)}/>
       </div>

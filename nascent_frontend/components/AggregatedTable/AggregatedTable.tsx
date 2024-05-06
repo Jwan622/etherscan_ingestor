@@ -32,7 +32,7 @@ const AggregatedTable = () => {
 
   return (
     <>
-      <h1>Aggregations involving account: {displayedAddress}</h1>
+      <h1>Aggregations involving {displayedAddress == "ALL ADDRESSES" ? displayedAddress : "Account: " + displayedAddress}</h1>
       <div className={styles.searchContainer}>
         <DualFieldSearchBar onSubmit={(params) => handleAggregatedSearch({timestamp: params.timestamp, address: params.address})}/>
       </div>
