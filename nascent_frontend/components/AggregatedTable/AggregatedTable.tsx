@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { parseISO, format } from 'date-fns';
 import DualFieldSearchBar from '../DualFieldSearchBar/DualFieldSearchBar';
 import styles from '../TransactionTable/TransactionTable.module.css';

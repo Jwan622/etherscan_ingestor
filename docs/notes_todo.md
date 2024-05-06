@@ -37,6 +37,7 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [x] display the address that we're focusing on in the header
 - [ ] some graphical libraries. chart.js?
 - [ ] caching in the server using redis, cache on address and datetime/timestamp. invalidate cache when it holds too many records FIFO style.
+- [ ] you need to write some frontend tests that involve interaction. Setup a test db and then click around the web
 
 
 ## Todo General
