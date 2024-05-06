@@ -1,6 +1,6 @@
 module.exports = {
   presets: [
-    ['@babel/preset-env', {
+    ['@babel/preset-flow', {
       targets: {
         node: 'current', // Target the current version of Node
       }
