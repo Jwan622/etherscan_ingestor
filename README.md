@@ -12,7 +12,20 @@ Github: `Jwan622`
 
 ## Overview
 
-We have an ingestor and a Next.js frontend. Let's get up and running
+We have an ingestor and a Next.js frontend and a postgres container. Let's get up and running all 3 services.
+
+## Other Docs
+
+I took notes in the docs folder in each repo. Check them out if you'd like. Things I learned or discovered I noted here.
+
+For example: [api notes on etherscan](./docs/notes_api.md) or [notes on code](./docs/notes_code.md).
+
+Also, my todo list with some future features if I had more time.
+
+[todo list](./docs/notes_todo.md)
+
+You might be wondering why no Flask or Django server? Explanation here:
+[architecture choices](docs/notes_project_design.md)
 
 ## Up and Running
 
@@ -20,7 +33,7 @@ Let's get the ingestor running first.
 
 ### Running the ingestor
 
-First, get poetry installed. I stripped out pip for poetry. You should be able to install poetry if you run:
+First, get poetry installed. I stripped out pip for poetry (script files too). You should be able to install poetry if you run:
 ```bash
 cd nascent_etherscan_ingestor
 make build
@@ -55,6 +68,8 @@ make test
 
 ### Running our Next.js frontend
 
+I think you'll need node 18.17 and npx? More info here: https://nextjs.org/docs/getting-started/installation. But maybe not? Try this:
+
 ```bash
 cd etherscan_frontend
 ```
@@ -68,16 +83,10 @@ yarn dev
 
 which should get the next.js project up and running on `localhost:3000` and it connects to the postgres database.
 
-If you run the ingestor with `make run` in one terminal, it will ingest data to the docker container which is port-forwarded from `localhost:5434` (I changed default port, yes). The frontend can run against the postgres container as data is being ingested to it.
+**(Sorry getting up and running with this might involve downloading node and npx and I'm unwilling to uninstall both on my machine lol)**
 
-# Other Docs
+If you run the ingestor with `make run` in one terminal, it will ingest data to the docker container which is port-forwarded from `localhost:5434` (I changed the default port for the docker port forwarding to postgres, yes). The frontend can run against the postgres container as data is being ingested to it.
 
-I took notes in the docs folder in each repo. Check them out if you'd like. Things I learned or discovered
 
-For example: [api notes on etherscan](./docs/notes_api.md) or [notes on code](./docs/notes_code.md)
-
-Also my todo list with some future features if I had more time.
-
-[todo list](./docs/notes_todo.md)
 
 
