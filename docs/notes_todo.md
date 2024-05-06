@@ -22,8 +22,8 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [x] mock out the threadcontextmanager in the crawl and ingest test
 - [ ] write integration test, end to end starting with the click/typer command. and then inspecting the state of the database. I guess you still have to mockout the etherscan request here.
 - [ ] build a matlibplot or some pandas just because.
-- [ ] implement crawling for more addresses to query. create a queue (a table is fine maybe with `queued` and `visited` columns) for all the from and to addresses you see. Sort of like web crawling.
-- [ ] my divide and conquer approach is inefficient because some block windows are hot spots whereas others are not. Some Threads finish super quickly while others take too long. We should constantly be dividing and conquering the block windows. That's MVP2.
+- [ ] implement crawling for more addresses to query. create a queue (a table is fine maybe with `queued` and `visited` columns) for all the from_addresses and to_addresses you see. Sort of like web crawling.
+- [ ] my divide and conquer approach is inefficient because some block windows are hot spots whereas others are not. You can actually see this in the frontend aggregated view! There are some days with much larger amounts of transactions than others so... some Threads finish super quickly while others take too long. We should constantly be dividing and conquering the block windows. That's MVP2.
 - [ ] build a way to provide a timestamp and ingest records after that timestamp (this would be great for an orchestrator like Airflow)
 
 
@@ -34,9 +34,9 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [x] be able to filter by date. A calendar?
 - [x] css and styling... badly needed.
 - [x] fix  timestamp bug. write a test to check that timestamp in database the same as timestamp on page.
+- [x] display the address that we're focusing on in the header
 - [ ] some graphical libraries. chart.js?
 - [ ] caching in the server using redis, cache on address and datetime/timestamp. invalidate cache when it holds too many records FIFO style.
-- [ ] display the address that we're focusing on in the header
 
 
 ## Todo General
