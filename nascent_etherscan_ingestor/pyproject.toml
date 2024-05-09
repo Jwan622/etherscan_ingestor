@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "jeff wan takehome for nascent"
 authors = ["Jeffrey <jwan622@gmail.com>"]
 readme = "README.md"
-
+package-mode = false
 
 [[tool.poetry.packages]]
 include = "assignment"
@@ -32,4 +32,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-crawl-and-ingest = "src.assignment.ingest:crawl_and_ingest"
+start = "src.assignment.ingest:start"

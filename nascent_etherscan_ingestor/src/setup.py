@@ -18,7 +18,7 @@ setup(
     author_email="Jwan622@gmail.com",
     license="MIT License",
     package_dir={"": "assignment"},
-    entry_points={"console_scripts": ["db_import=assignment:ingest"]},
+    entry_points={"console_scripts": ["db_import=assignment:call_api_and_produce"]},
     install_requires=[
         "sqlalchemy==1.2.13",
         "beautifulsoup4",

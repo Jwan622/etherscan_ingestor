@@ -1,7 +1,7 @@
 import pytest
 from pytest_mock import MockerFixture
 from concurrent.futures import Future
-from src.assignment.ingest import crawl_and_ingest, ingest
+from src.assignment.ingest import start, call_api_and_produce
 from src.assignment.db import init_db
 from src.assignment.models import Transaction, Address
 from decimal import Decimal
@@ -13,15 +13,15 @@ SOME_DEFAULT_ADDRESS = 'some_default_address'
 
 @pytest.fixture(autouse=True)
 def mock_config_vars(mocker):
-    mocker.patch('src.assignment.ingest.CONFIG', new={})
-    mocker.patch('src.assignment.ingest.THREADS_COUNT', new=THREADS_IN_TEST)
-    mocker.patch('src.assignment.ingest.DEV_MODE', new=None)
-    mocker.patch('src.assignment.ingest.API_RATE_LIMIT_DELAY', new=0)
-    mocker.patch('src.assignment.ingest.DATABASE_URI', new='some_fake_database_uri')
-    mocker.patch('src.assignment.ingest.DEV_MODE_ENDING_MULTIPLE', new=20)
-    mocker.patch('src.assignment.ingest.DEFAULT_ADDRESS', new=SOME_DEFAULT_ADDRESS)
-    mocker.patch("src.assignment.ingest.API_KEY", new="some_api_key")
-    mocker.patch("src.assignment.ingest.BASE_BLOCK_ATTEMPT", new=10)
+    mocker.patch('src.assignment.call_api_and_produce.CONFIG', new={})
+    mocker.patch('src.assignment.call_api_and_produce.THREADS_COUNT', new=THREADS_IN_TEST)
+    mocker.patch('src.assignment.call_api_and_produce.DEV_MODE', new=None)
+    mocker.patch('src.assignment.call_api_and_produce.API_RATE_LIMIT_DELAY', new=0)
+    mocker.patch('src.assignment.call_api_and_produce.DATABASE_URI', new='some_fake_database_uri')
+    mocker.patch('src.assignment.call_api_and_produce.DEV_MODE_ENDING_MULTIPLE', new=20)
+    mocker.patch('src.assignment.call_api_and_produce.DEFAULT_ADDRESS', new=SOME_DEFAULT_ADDRESS)
+    mocker.patch("src.assignment.call_api_and_produce.API_KEY", new="some_api_key")
+    mocker.patch("src.assignment.call_api_and_produce.BASE_BLOCK_ATTEMPT", new=10)
 
 
 @pytest.fixture
@@ -49,13 +49,13 @@ def mock_db_session(mocker):
     session_mock.query.return_value = query_mock
     filter_mock.one_or_none.return_value = addr_obj_mock
 
-    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: session_mock)
+    mocker.patch('src.assignment.call_api_and_produce.Session', new_callable=lambda: session_mock)
     return session_mock
 
 @pytest.fixture
 def test_db(mocker):
     test_session = init_db('sqlite:///:memory:')
-    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
+    mocker.patch('src.assignment.call_api_and_produce.Session', new_callable=lambda: test_session)
     return test_session
 
 @pytest.fixture
@@ -125,12 +125,12 @@ def mock_initial_requests_to_get_block_window(mocker: MockerFixture):
         "result": []
     }
 
-    return mocker.patch('src.assignment.ingest.requests.get', side_effect=[response_mock_asc, response_mock_desc, empty_response])
+    return mocker.patch('src.assignment.call_api_and_produce.requests.get', side_effect=[response_mock_asc, response_mock_desc, empty_response])
 
 
 @pytest.fixture
 def executor_mock(mocker):
-    mock_executor = mocker.patch('src.assignment.ingest.ThreadPoolExecutor', autospec=True)
+    mock_executor = mocker.patch('src.assignment.call_api_and_produce.ThreadPoolExecutor', autospec=True)
     mock_submit = mocker.Mock()
     future = Future()
     future.set_result(None)
@@ -142,7 +142,7 @@ def executor_mock(mocker):
 
 @pytest.fixture
 def ingest_mock(mocker):
-    return mocker.patch('src.assignment.ingest.ingest')
+    return mocker.patch('src.assignment.call_api_and_produce.call_api_and_produce')
 
 
 class TestCrawlAndIngest:
@@ -150,7 +150,7 @@ class TestCrawlAndIngest:
         expected_asc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey=some_api_key"
         expected_desc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey=some_api_key"
 
-        crawl_and_ingest()
+        start()
 
         assert mock_initial_requests_to_get_block_window.call_args_list[0][0][0] == expected_asc_url
         assert mock_initial_requests_to_get_block_window.call_args_list[1][0][0] == expected_desc_url
@@ -158,7 +158,7 @@ class TestCrawlAndIngest:
     def test_threads_return(self, mock_initial_requests_to_get_block_window, executor_mock, ingest_mock):
         _, mock_submit = executor_mock
 
-        crawl_and_ingest()
+        start()
 
         # all futures are resolved
         assert all(call.return_value.result.called for call in mock_submit.call_args_list)
@@ -167,7 +167,7 @@ class TestCrawlAndIngest:
         mock_executor, _ = executor_mock
         expected_block_ranges_per_thread = [(1, 2), (3, 4), (5, 6), (7, 8)]
 
-        crawl_and_ingest()
+        start()
 
         actual_ranges = [
             (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list
@@ -188,7 +188,7 @@ class TestIngest:
             f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=8&endblock=18&page=1&offset=10000&sort=asc&apikey=some_api_key",
         ]
 
-        ingest(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
+        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
 
         # Check that the call count matches the expected number of API calls
         assert len(mock_initial_requests_to_get_block_window.call_args_list) == len(
@@ -269,7 +269,7 @@ class TestIngest:
       },
   ]
 
-        ingest(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
+        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
 
         transactions = test_db.query(Transaction).all()
         actual = [{column.name: getattr(t, column.name) for column in t.__table__.columns} for t in transactions]
