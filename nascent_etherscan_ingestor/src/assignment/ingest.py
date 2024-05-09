@@ -127,8 +127,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
 
     try:
         while current_block <= ending_block:
-            logger.info(
-                f"New Loop. current_block: {current_block}, ending_block: {ending_block}, thread_id: {thread_id}")
+            __log_with_thread_id(f"New Loop. current_block: {current_block}, ending_block: {ending_block}", thread_id)
             tentative_end_block = min(current_block + BASE_BLOCK_ATTEMPT, ending_block)
             data = __call_etherscan(address, thread_id, startblock=current_block, endblock=tentative_end_block)
 
