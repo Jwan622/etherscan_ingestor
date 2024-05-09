@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import queue
 
 from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT,
-                                   CONSUMER_THREAD_COUNT,
                                    DEV_STEP, SEMAPHOR_THREAD_COUNT, SAVE_BATCH_LIMIT, DEFAULT_ADDRESS, DEV_MODE,
                                    DEV_MODE_ENDING_MULTIPLE, DEV_PRODUCER_THREAD_COUNT, API_RATE_LIMIT_DELAY,
                                    BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS)
@@ -63,6 +62,7 @@ def __get_or_create_address(address):
     session = Session()
     try:
         addr_obj = session.query(Address).filter_by(address=address).one_or_none()
+
         if not addr_obj:
             addr_obj = Address(address=address)
             session.add(addr_obj)
@@ -123,8 +123,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
     - if fewer than 10000 records, we batch and save to database
     """
     current_block = starting_block
-    block_window_amount = BASE_BLOCK_ATTEMPT if DEV_MODE == False else DEV_STEP
-
+    block_window_amount = BASE_BLOCK_ATTEMPT if not DEV_MODE else DEV_STEP
     try:
         while current_block <= ending_block:
             __log_with_thread_id(f"New Loop. current_block: {current_block}, ending_block: {ending_block}", thread_id)
@@ -172,11 +171,12 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
                         gas_used=int(tx["gasUsed"]),
                         is_error=int(tx["isError"]),
                     )
+
                     transaction_queue.put(transaction)
 
             if data["result"]:
                 __log_with_thread_id(f"Changing current block from {current_block}...", thread_id)
-                current_block = int(data["result"][-1]["blockNumber"]) + 1
+                current_block = tentative_end_block + 1
                 __log_with_thread_id(f"...to new current block {current_block}", thread_id)
                 block_window_amount = BASE_BLOCK_ATTEMPT
 
@@ -188,8 +188,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
             f"Reached endblock. current_block: {current_block}, end_block: {ending_block}. Killing thread",
             thread_id)
 
-
-def __consume(transaction_queue, producers_all_done_event):
+def consume(transaction_queue, producers_all_done_event):
     logger.info("CONSUMER STARTING!")
     session = Session()
     transactions_to_batch = []  # this may not actually improve inserts but it's more for my readability santiy in the logs.
@@ -240,14 +239,14 @@ def start():
     producers_all_done_event = threading.Event()
 
     block_generator = __block_ranges(starting_block, ending_block,
-                                     BASE_BLOCK_ATTEMPT if DEV_MODE == False else DEV_STEP)
+                                     BASE_BLOCK_ATTEMPT if not DEV_MODE else DEV_STEP)
 
     with ThreadPoolExecutor(
-            max_workers=PRODUCER_THREAD_COUNT if DEV_MODE == False else DEV_PRODUCER_THREAD_COUNT) as executor:
+            max_workers=PRODUCER_THREAD_COUNT if not DEV_MODE else DEV_PRODUCER_THREAD_COUNT) as executor:
         futures = {}
         thread_id = 0
 
-        consumer_future = executor.submit(__consume, queue_for_transactions, producers_all_done_event)
+        consumer_future = executor.submit(consume, queue_for_transactions, producers_all_done_event)
 
         for _ in range(PRODUCER_THREAD_COUNT):
             try:
@@ -259,26 +258,25 @@ def start():
             except StopIteration:
                 break
 
-            while futures:
-                for future in as_completed(futures):
-                    futures.pop(future)
-                    try:
-                        new_range = next(block_generator)
-                        future = executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
-                                                 queue_for_transactions, thread_id)
-                        futures[future] = new_range
-                        thread_id += 1
-                    except StopIteration:
-                        break
+        while futures:
+            for future in as_completed(futures):
+                futures.pop(future)
+                try:
+                    new_range = next(block_generator)
+                    future = executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
+                                             queue_for_transactions, thread_id)
+                    futures[future] = new_range
+                    thread_id += 1
+                except StopIteration:
+                    break
 
         producers_all_done_event.set()
-
         logger.info("All producers have finished producing.")
 
         consumer_result = consumer_future.result()  # This ensures that the consumer has processed all items
         logger.info(f"Consumer has finished processing all items. {consumer_result}")
 
-    logger.info("Executor shutdown complete. Jeff Wan hired.")
+    logger.info("Executor shutdown of consumer and producer complete. Jeff Wan signing off.")
 
 if __name__ == "__main__":
     start()

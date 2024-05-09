@@ -3,25 +3,24 @@ from pytest_mock import MockerFixture
 from concurrent.futures import Future
 from src.assignment.ingest import start, call_api_and_produce
 from src.assignment.db import init_db
-from src.assignment.models import Transaction, Address
-from decimal import Decimal
 from datetime import datetime
+import datetime
 
-THREADS_IN_TEST = 4
+PRODUCER_THREAD_COUNT = 4
 SOME_DEFAULT_ADDRESS = 'some_default_address'
 
 
 @pytest.fixture(autouse=True)
 def mock_config_vars(mocker):
-    mocker.patch('src.assignment.call_api_and_produce.CONFIG', new={})
-    mocker.patch('src.assignment.call_api_and_produce.THREADS_COUNT', new=THREADS_IN_TEST)
-    mocker.patch('src.assignment.call_api_and_produce.DEV_MODE', new=None)
-    mocker.patch('src.assignment.call_api_and_produce.API_RATE_LIMIT_DELAY', new=0)
-    mocker.patch('src.assignment.call_api_and_produce.DATABASE_URI', new='some_fake_database_uri')
-    mocker.patch('src.assignment.call_api_and_produce.DEV_MODE_ENDING_MULTIPLE', new=20)
-    mocker.patch('src.assignment.call_api_and_produce.DEFAULT_ADDRESS', new=SOME_DEFAULT_ADDRESS)
-    mocker.patch("src.assignment.call_api_and_produce.API_KEY", new="some_api_key")
-    mocker.patch("src.assignment.call_api_and_produce.BASE_BLOCK_ATTEMPT", new=10)
+    mocker.patch('src.assignment.ingest.CONFIG', new={})
+    mocker.patch("src.assignment.ingest.API_KEY", new="some_api_key")
+    mocker.patch('src.assignment.ingest.API_RATE_LIMIT_DELAY', new=0)
+    mocker.patch("src.assignment.ingest.BASE_BLOCK_ATTEMPT", new=4)
+    mocker.patch('src.assignment.ingest.DEFAULT_ADDRESS', new=SOME_DEFAULT_ADDRESS)
+    mocker.patch('src.assignment.ingest.DEV_MODE', new=None)
+    mocker.patch('src.assignment.ingest.DATABASE_URI', new='some_fake_database_uri')
+    mocker.patch("src.assignment.ingest.SAVE_BATCH_LIMIT", new=3)
+    mocker.patch('src.assignment.ingest.PRODUCER_THREAD_COUNT', new=PRODUCER_THREAD_COUNT)
 
 
 @pytest.fixture
@@ -49,14 +48,21 @@ def mock_db_session(mocker):
     session_mock.query.return_value = query_mock
     filter_mock.one_or_none.return_value = addr_obj_mock
 
-    mocker.patch('src.assignment.call_api_and_produce.Session', new_callable=lambda: session_mock)
+    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: session_mock)
     return session_mock
+
 
 @pytest.fixture
 def test_db(mocker):
     test_session = init_db('sqlite:///:memory:')
-    mocker.patch('src.assignment.call_api_and_produce.Session', new_callable=lambda: test_session)
+    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
     return test_session
+
+
+@pytest.fixture
+def mock_transaction(mocker):
+    return mocker.patch('src.assignment.ingest.Transaction', autospec=True)
+
 
 @pytest.fixture
 def mock_initial_requests_to_get_block_window(mocker: MockerFixture):
@@ -125,28 +131,86 @@ def mock_initial_requests_to_get_block_window(mocker: MockerFixture):
         "result": []
     }
 
-    return mocker.patch('src.assignment.call_api_and_produce.requests.get', side_effect=[response_mock_asc, response_mock_desc, empty_response])
+    return mocker.patch('src.assignment.ingest.requests.get', side_effect=[response_mock_asc, response_mock_desc, empty_response])
+
+
+@pytest.fixture
+def mock_etherscan_calls_for_blocks(mocker: MockerFixture):
+    last_block_number = [0]  # Using a list to hold the counter to avoid nonlocal declaration issues
+
+    def create_response(block_start, count=2):
+        return {
+            "status": "1",
+            "message": "OK",
+            "result": [
+                {
+                    "blockNumber": str(block_start + i),
+                    "timeStamp": str(100 + block_start + i),
+                    "hash": f"some_hash_{block_start + i}",
+                    "from": f"some_from_address_{block_start + i}",
+                    "to": f"some_to_address_{block_start + i}",
+                    "value": str(200 + block_start + i),
+                    "contractAddress": f"some_contract_address_{block_start + i}",
+                    "input": "",
+                    "type": "call",
+                    "gas": str(400 + block_start + i),
+                    "gasUsed": str(500 + block_start + i),
+                    "traceId": "0_2_0",
+                    "isError": "0",
+                    "errCode": ""
+                } for i in range(count)
+            ]
+        }
+
+    def response_function(url, params=None):
+        response = mocker.Mock()
+        response.json.return_value = create_response(last_block_number[0])
+        last_block_number[0] += 2
+        return response
+
+
+    return mocker.patch('src.assignment.ingest.requests.get', side_effect=response_function)
+
 
 
 @pytest.fixture
 def executor_mock(mocker):
-    mock_executor = mocker.patch('src.assignment.call_api_and_produce.ThreadPoolExecutor', autospec=True)
+    mock_executor = mocker.patch('src.assignment.ingest.ThreadPoolExecutor', autospec=True)
     mock_submit = mocker.Mock()
+    # lol this took me forever to figure out how stub out the context manager's return_value
+    mock_executor.return_value.__enter__.return_value.submit = mock_submit
     future = Future()
     future.set_result(None)
     mock_submit.return_value = future
-    # lol this took me forever to figure out how stub out the context manager's return_value
-    mock_executor.return_value.__enter__.return_value.submit = mock_submit
     return mock_executor, mock_submit
 
 
 @pytest.fixture
-def ingest_mock(mocker):
-    return mocker.patch('src.assignment.call_api_and_produce.call_api_and_produce')
+def mock_call_api_and_produce(mocker):
+    return mocker.patch('src.assignment.ingest.call_api_and_produce')
+
+@pytest.fixture
+def mock_consume(mocker):
+    return mocker.patch('src.assignment.ingest.consume')
 
 
-class TestCrawlAndIngest:
-    def test_api_calls_with_correct_parameters(self, mock_initial_requests_to_get_block_window, executor_mock, ingest_mock):
+@pytest.fixture
+def mock_queue(mocker):
+    mock_queue = mocker.Mock()
+    mocker.patch('src.assignment.ingest.queue.Queue', return_value=mock_queue)
+    return mock_queue
+
+
+@pytest.fixture
+def mock_threading_event(mocker):
+    mock_threading_event = mocker.Mock()
+    mocker.patch('src.assignment.ingest.threading.Event', return_value=mock_threading_event)
+    return mock_threading_event
+
+
+class TestStart:
+    def test_correctly_makes_two_api_calls_to_get_block_window(self, mock_initial_requests_to_get_block_window, executor_mock,
+                                                               mock_call_api_and_produce):
         expected_asc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey=some_api_key"
         expected_desc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey=some_api_key"
 
@@ -155,128 +219,76 @@ class TestCrawlAndIngest:
         assert mock_initial_requests_to_get_block_window.call_args_list[0][0][0] == expected_asc_url
         assert mock_initial_requests_to_get_block_window.call_args_list[1][0][0] == expected_desc_url
 
-    def test_threads_return(self, mock_initial_requests_to_get_block_window, executor_mock, ingest_mock):
+    def test_submit_consumer_and_producer_threads(self, mocker, mock_initial_requests_to_get_block_window, executor_mock,
+                                                  mock_call_api_and_produce, mock_queue, mock_threading_event, mock_consume):
         _, mock_submit = executor_mock
+        expected_calls = [
+            mocker.call(mock_consume, mock_queue, mock_threading_event),
+            mocker.call(mock_call_api_and_produce, 'some_default_address', 1, 4, mock_queue, 0),
+            mocker.call(mock_call_api_and_produce, 'some_default_address', 5, 8, mock_queue, 1),
+        ]
 
         start()
 
-        # all futures are resolved
-        assert all(call.return_value.result.called for call in mock_submit.call_args_list)
+        mock_submit.assert_has_calls(expected_calls)
 
-    def test_thread_execution_with_correct_block_ranges(self, mock_initial_requests_to_get_block_window, executor_mock, ingest_mock):
+    def test_producer_threads_called_with_correct_block_ranges(self, mock_initial_requests_to_get_block_window, executor_mock,
+                                                        mock_call_api_and_produce):
         mock_executor, _ = executor_mock
-        expected_block_ranges_per_thread = [(1, 2), (3, 4), (5, 6), (7, 8)]
+        expected_block_ranges_per_thread = [(1, 4), (5, 8)]
 
         start()
 
         actual_ranges = [
-            (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list
+            (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list[1:] # only the producers
         ]
         assert expected_block_ranges_per_thread == actual_ranges
 
 
-class TestIngest:
-    # you can test messages sent to the api OR test a test database. I think the latter is better and more stable for refactors.
-    def test_ingest_simple_result_less_than_10k(self, mock_initial_requests_to_get_block_window, mock_db_session):
+class TestCallApiAndProduce:
+    def test_calls_api_with_correct_blocks(self, mock_etherscan_calls_for_blocks, mock_queue, mock_db_session):
         starting_block = 0
         ending_block = 20
         thread_id = 0
-        session = mock_db_session()
         expected_calls = [
-            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=0&endblock=10&page=1&offset=10000&sort=asc&apikey=some_api_key",
-            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=7&endblock=17&page=1&offset=10000&sort=asc&apikey=some_api_key",
-            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=8&endblock=18&page=1&offset=10000&sort=asc&apikey=some_api_key",
+            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=0&endblock=4&page=1&offset=10000&sort=asc&apikey=some_api_key",
+            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=5&endblock=9&page=1&offset=10000&sort=asc&apikey=some_api_key",
+            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=10&endblock=14&page=1&offset=10000&sort=asc&apikey=some_api_key",
+            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=15&endblock=19&page=1&offset=10000&sort=asc&apikey=some_api_key",
+            f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={SOME_DEFAULT_ADDRESS}&startblock=20&endblock=20&page=1&offset=10000&sort=asc&apikey=some_api_key",
         ]
 
-        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
+        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, mock_queue, thread_id)
 
-        # Check that the call count matches the expected number of API calls
-        assert len(mock_initial_requests_to_get_block_window.call_args_list) == len(
+        assert len(mock_etherscan_calls_for_blocks.call_args_list) == len(
             expected_calls), "Unexpected number of calls to requests.get"
-        # Check each call against expected
-        for call, expected_url in zip(mock_initial_requests_to_get_block_window.call_args_list, expected_calls):
+        for call, expected_url in zip(mock_etherscan_calls_for_blocks.call_args_list, expected_calls):
             actual_url = call[0][0]
             assert actual_url == expected_url, f"Expected {expected_url}, got {actual_url}"
 
-        assert session.bulk_save_objects.called, "Session.bulk_save_objects() was not called"
-        assert session.commit.called, "Session.commit() was not called"
-        assert session.close.called, "Session.close() was not called"
-
-    def test_ingest_simple_result_less_than_10k_better_test(self, mock_initial_requests_to_get_block_window, test_db):
+    def test_call_api_with_correct_blocks_with_mock_queue(self, mock_etherscan_calls_for_blocks, mock_queue, mock_transaction, test_db):
         starting_block = 0
         ending_block = 20
         thread_id = 1
-        expected_valid_no_error_value_rows = [
-      {
-          'block_number': 1,
-          'from_address_id': 1,
-          'gas': 401,
-          'gas_used': 500,
-          'hash': 'some_hash_1',
-          'id': 1,
-          'is_error': 0,
-          'time_stamp': datetime(1970, 1, 1, 0, 1, 41),
-          'to_address_id': 1,
-          'value': Decimal('200'),
-      },
-      {
-          'block_number': 2,
-          'from_address_id': 2,
-          'gas': 402,
-          'gas_used': 502,
-          'hash': 'some_hash_2',
-          'id': 2,
-          'is_error': 0,
-          'time_stamp': datetime(1970, 1, 1, 0, 1, 42),
-          'to_address_id': 2,
-          'value': Decimal('202'),
-      },
-      {
-          'block_number': 3,
-          'from_address_id': 3,
-          'gas': 403,
-          'gas_used': 503,
-          'hash': 'some_hash_3',
-          'id': 3,
-          'is_error': 0,
-          'time_stamp': datetime(1970, 1, 1, 0, 1, 43),
-          'to_address_id': 3,
-          'value': Decimal('203'),
-      },
-      {
-          'block_number': 4,
-          'from_address_id': 4,
-          'gas': 404,
-          'gas_used': 504,
-          'hash': 'some_hash_4',
-          'id': 4,
-          'is_error': 0,
-          'time_stamp': datetime(1970, 1, 1, 0, 1, 44),
-          'to_address_id': 5,
-          'value': Decimal('204'),
-      },
-      {
-          'block_number': 8,
-          'from_address_id': 6,
-          'gas': 407,
-          'gas_used': 507,
-          'hash': 'some_hash_8',
-          'id': 5,
-          'is_error': 0,
-          'time_stamp': datetime(1970, 1, 1, 0, 1, 48),
-          'to_address_id': 6,
-          'value': Decimal('208'),
-      },
-  ]
+        expected_transaction_calls = [
+            {'block_number': 0, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 40, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_0', 'from_address_id': 1, 'to_address_id': 2, 'value': 200,'gas': 400, 'gas_used': 500, 'is_error': 0},
+            {'block_number': 1, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 41, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_1', 'from_address_id': 3, 'to_address_id': 4, 'value': 201,  'gas': 401, 'gas_used': 501, 'is_error': 0},
+            {'block_number': 2, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 42, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_2', 'from_address_id': 5, 'to_address_id': 6, 'value': 202, 'gas': 402, 'gas_used': 502, 'is_error': 0},
+            {'block_number': 3, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 43, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_3', 'from_address_id': 7, 'to_address_id': 8, 'value': 203, 'gas': 403, 'gas_used': 503, 'is_error': 0},
+            {'block_number': 4, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 44, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_4', 'from_address_id': 9, 'to_address_id': 10, 'value': 204, 'gas': 404, 'gas_used': 504, 'is_error': 0},
+            {'block_number': 5, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 45, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_5', 'from_address_id': 11, 'to_address_id': 12, 'value': 205, 'gas': 405, 'gas_used': 505, 'is_error': 0},
+            {'block_number': 6, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 46, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_6', 'from_address_id': 13, 'to_address_id': 14, 'value': 206, 'gas': 406, 'gas_used': 506, 'is_error': 0},
+            {'block_number': 7, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 47, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_7', 'from_address_id': 15, 'to_address_id': 16, 'value': 207, 'gas': 407, 'gas_used': 507, 'is_error': 0},
+            {'block_number': 8, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 48, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_8', 'from_address_id': 17, 'to_address_id': 18, 'value': 208, 'gas': 408, 'gas_used': 508, 'is_error': 0},
+            {'block_number': 9, 'time_stamp': datetime.datetime(1970, 1, 1, 0, 1, 49, tzinfo=datetime.timezone.utc), 'hash': 'some_hash_9', 'from_address_id': 19, 'to_address_id': 20, 'value': 209, 'gas': 409, 'gas_used': 509, 'is_error': 0}
+        ]
 
-        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, thread_id)
+        call_api_and_produce(SOME_DEFAULT_ADDRESS, starting_block, ending_block, mock_queue, thread_id)
 
-        transactions = test_db.query(Transaction).all()
-        actual = [{column.name: getattr(t, column.name) for column in t.__table__.columns} for t in transactions]
+        for call, expected in zip(mock_transaction.call_args_list, expected_transaction_calls):
+            _, kwargs = call
 
-        # inspect the state of the in memory sqllite database, this is less brittle
-        assert len(transactions) == 5, "Some wrong transactions were missed or  added."
-        assert actual == expected_valid_no_error_value_rows
+            for key, val in expected.items():
+                assert kwargs[key] == val
 
-
-
+        assert len(mock_queue.put.call_args_list) == 10 # all the transactions are mocks and the same.
