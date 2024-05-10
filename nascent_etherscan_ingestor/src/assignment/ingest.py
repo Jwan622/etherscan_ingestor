@@ -157,22 +157,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
 
             for tx in data["result"]:
                 if int(tx["value"]) > 0 and tx["isError"] != "1":
-                    from_address_id = __get_or_create_address(tx["from"])
-                    to_address_id = __get_or_create_address(tx["to"])
-
-                    transaction = Transaction(
-                        block_number=int(tx["blockNumber"]),
-                        time_stamp=datetime.fromtimestamp(int(tx["timeStamp"]), timezone.utc),
-                        hash=tx["hash"],
-                        from_address_id=from_address_id,
-                        to_address_id=to_address_id,
-                        value=int(tx["value"]),
-                        gas=int(tx["gas"]),
-                        gas_used=int(tx["gasUsed"]),
-                        is_error=int(tx["isError"]),
-                    )
-
-                    transaction_queue.put(transaction)
+                    transaction_queue.put(tx)
 
             if data["result"]:
                 __log_with_thread_id(f"Changing current block from {current_block}...", thread_id)
@@ -197,12 +182,26 @@ def consume(transaction_queue, producers_all_done_event):
         # run until all producers are done and the queue is empty
         while not producers_all_done_event.is_set() or not transaction_queue.empty():
             try:
-                transaction = transaction_queue.get(timeout=10)
+                transaction = transaction_queue.get(timeout=1)
+                from_address_id = __get_or_create_address(transaction["from"])
+                to_address_id = __get_or_create_address(transaction["to"])
+
+                transaction = Transaction(
+                    block_number=int(transaction["blockNumber"]),
+                    time_stamp=datetime.fromtimestamp(int(transaction["timeStamp"]), timezone.utc),
+                    hash=transaction["hash"],
+                    from_address_id=from_address_id,
+                    to_address_id=to_address_id,
+                    value=int(transaction["value"]),
+                    gas=int(transaction["gas"]),
+                    gas_used=int(transaction["gasUsed"]),
+                    is_error=int(transaction["isError"]),
+                )
                 transactions_to_batch.append(transaction)
                 if len(transactions_to_batch) >= SAVE_BATCH_LIMIT:
                     __save(session, transactions_to_batch)
                     transactions_to_batch.clear()
-                    logger.debug(f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}")
+                    logger.debug(f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}. Current db size: {session.query(Transaction).count()}")
             except queue.Empty:
                 if producers_all_done_event.is_set():
                     logger.debug("Producers have finished; no more transactions are expected.")

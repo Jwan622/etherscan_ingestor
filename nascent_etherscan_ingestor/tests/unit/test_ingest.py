@@ -1,10 +1,20 @@
+import queue
 import pytest
 from pytest_mock import MockerFixture
 from concurrent.futures import Future
-from src.assignment.ingest import start, call_api_and_produce
-from src.assignment.db import init_db
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from src.assignment.ingest import start, call_api_and_produce, consume, init_db
 from datetime import datetime
 import datetime
+import threading
+import time
+
+from src.assignment.models import Transaction
+from tests.utils.test_db import init_test_db
 
 PRODUCER_THREAD_COUNT = 4
 SOME_DEFAULT_ADDRESS = 'some_default_address'
@@ -50,13 +60,6 @@ def mock_db_session(mocker):
 
     mocker.patch('src.assignment.ingest.Session', new_callable=lambda: session_mock)
     return session_mock
-
-
-@pytest.fixture
-def test_db(mocker):
-    test_session = init_db('sqlite:///:memory:')
-    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
-    return test_session
 
 
 @pytest.fixture
@@ -266,7 +269,7 @@ class TestCallApiAndProduce:
             actual_url = call[0][0]
             assert actual_url == expected_url, f"Expected {expected_url}, got {actual_url}"
 
-    def test_call_api_with_correct_blocks_with_mock_queue(self, mock_etherscan_calls_for_blocks, mock_queue, mock_transaction, test_db):
+    def test_call_api_with_correct_blocks_with_mock_queue(self, mock_etherscan_calls_for_blocks, mock_queue, mock_transaction):
         starting_block = 0
         ending_block = 20
         thread_id = 1
@@ -292,3 +295,70 @@ class TestCallApiAndProduce:
                 assert kwargs[key] == val
 
         assert len(mock_queue.put.call_args_list) == 10 # all the transactions are mocks and the same.
+
+
+class TestConsumer():
+    @pytest.fixture(autouse=True)
+    def test_db(self, mocker):
+        test_session = init_db('sqlite:///:memory:')
+        mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
+        return test_session
+
+
+    def create_item(self, index):
+        return {
+            "blockNumber":index,
+            "timeStamp": 1715350310,
+            "hash": f'some_hash_{index}',
+            "from": f"some_long_hexa_addr_{index}",
+            "to": f"some_long_hexa_addr_{index + 1}",
+            "value": 100 + index,
+            "gas": 200 + index,
+            "gasUsed": 300 + index,
+            "isError": 0
+        }
+
+    @pytest.fixture
+    def mock_consumer_queue(self, request):
+        test_queue = queue.Queue()
+        queue_length = request.param
+        for index in range(queue_length):
+            test_queue.put(self.create_item(index))
+        return test_queue
+
+    @pytest.mark.parametrize('mock_consumer_queue', [4], indirect=True)
+    def test_messages_get_consumed_if_producers_are_done(self, mocker, mock_consumer_queue, init_test_db):
+        session_factory = init_test_db
+        mocker.patch('src.assignment.ingest.Session', return_value=session_factory)
+
+        producer_event = mocker.Mock()
+        producer_event.is_set.return_value = True
+
+        assert mock_consumer_queue.qsize() == 4
+
+        consume(mock_consumer_queue, producer_event)
+
+        assert mock_consumer_queue.qsize() == 0
+
+    @pytest.mark.parametrize('mock_consumer_queue', [2], indirect=True)
+    def test_dynamic_consumer_behavior(self, mocker, mock_consumer_queue, init_test_db):
+        session_factory = init_test_db
+        mocker.patch('src.assignment.ingest.Session', return_value=session_factory)
+
+        producer_event = mocker.Mock()
+        producer_event.is_set.return_value = False
+
+        consumer_thread = threading.Thread(target=consume, args=(mock_consumer_queue, producer_event))
+        consumer_thread.start()
+
+        for i in range(5):
+            mock_consumer_queue.put(self.create_item(i))
+
+        time.sleep(0.2)  # Simulate time delay for real-time transaction processing
+        producer_event.is_set.return_value = True
+
+        consumer_thread.join()
+
+        with session_factory() as sesh:
+            transaction_count = sesh.query(Transaction).count()
+            assert transaction_count == 7
