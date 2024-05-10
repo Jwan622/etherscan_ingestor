@@ -27,6 +27,15 @@ Also, my todo list with some future features if I had more time.
 You might be wondering why no Flask or Django server? Explanation here:
 [architecture choices](docs/notes_project_design.md)
 
+**On May 10th rewrite**
+After submitting, I rethought my approach and thought of a better design choice. Here are a few changes:
+- used a queue to alleviate the producer/consumer problem. Now we have a consumer that consumes from a queue and writes to the db
+- The producer thread merely calls the API and writes messages to a queue
+- Added more tests and logging
+- Reduced the thread block so that there aren't long-running threads while other threads have finished. By giving each thread a smaller amount of work, this ensures we utilize the thread pool more evenly until we reach the end block for this address
+- Result: Much shorter ingestion time
+- Notes in [rewrite docs](docs/notes_rewrite.md)
+
 ## Up and Running
 
 Let's get the ingestor running first.
