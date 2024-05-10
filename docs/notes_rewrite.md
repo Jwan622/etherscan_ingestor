@@ -152,4 +152,19 @@ Fortunately, Python gives you several primitives that you’ll look at later to 
 #         executor.submit(consumer, pipeline)
 ```
 
-I modeled my rewrite after this. Using a queue to sit in between the producer (consumes api and writes to queue) and consumer. Also, I decided to give smaller chunks to the thread while iterating up to the end block which gives more even work to each thread. This better utilizes the thread pool. My first approach divided the block window into too large chunks to the threads, resulting in some threads living much longer than others... which was an uneven distribution of work to the threads. This uneven distribution of transactions was a result of the sort of... F distribution of transactions throughout the block range.
+I modeled my rewrite after this code above. Using a queue to sit in between the producer (consumes api and writes to queue) and consumer. Also, I decided to give smaller chunks to the thread while iterating up to the end block which gives more evenly distributed work to each thread. This better utilizes the thread pool. My first approach divided the entire block window into too large chunks to the threads, resulting in some threads living much longer than others... which was inefficient usage of the thread pool. This uneven distribution of transactions was a result of the sort of... an F distribution of transactions throughout the block range (i.e, the earlier part of the block range simply had more transactions so giving it entirely to 1 thread to process was inefficient.)
+
+With the additional consumer, we don't fall too far behind the queue:
+
+```python3
+2024-05-10 12:14:50,664 - INFO - thread_id: Consumer_thread_0. Message: About to save... 5000 records.
+2024-05-10 12:14:50,760 - DEBUG - https://api.etherscan.io:443 "GET /api?module=account&action=txlistinternal&address=0xE592427A0AEce92De3Edee1F18E0157C05861564&startblock=12414682&endblock=12423182&page=1&offset=10000&sort=asc&apikey=H4PV22WR9MSNYJM25TN9FFXEZGB3NFDX6V HTTP/1.1" 200 178
+2024-05-10 12:14:50,843 - INFO - thread_id: Consumer_thread_0. Message: Batch saved. Current transaction queue size: 185756. Current db size: 115000
+2024-05-10 12:14:50,863 - INFO - thread_id: 1. Message: Calling Etherscan API with current_block: 12414682, ending_block: 12423182, thread_id: 1
+2024-05-10 12:14:50,866 - DEBUG - Starting new HTTPS connection (1): api.etherscan.io:443
+2024-05-10 12:14:50,901 - DEBUG - https://api.etherscan.io:443 "GET /api?module=account&action=txlistinternal&address=0xE592427A0AEce92De3Edee1F18E0157C05861564&startblock=12736682&endblock=12745182&page=1&offset=10000&sort=asc&apikey=H4PV22WR9MSNYJM25TN9FFXEZGB3NFDX6V HTTP/1.1" 200 None
+2024-05-10 12:14:50,932 - DEBUG - https://api.etherscan.io:443 "GET /api?module=account&action=txlistinternal&address=0xE592427A0AEce92De3Edee1F18E0157C05861564&startblock=12856682&endblock=12872682&page=1&offset=10000&sort=asc&apikey=H4PV22WR9MSNYJM25TN9FFXEZGB3NFDX6V HTTP/1.1" 200 None
+2024-05-10 12:14:51,013 - INFO - thread_id: Consumer_thread_1. Message: About to save... 5000 records.
+2024-05-10 12:14:51,104 - DEBUG - https://api.etherscan.io:443 "GET /api?module=account&action=txlistinternal&address=0xE592427A0AEce92De3Edee1F18E0157C05861564&startblock=12414682&endblock=12423182&page=1&offset=10000&sort=asc&apikey=H4PV22WR9MSNYJM25TN9FFXEZGB3NFDX6V HTTP/1.1" 200 178
+2024-05-10 12:14:51,189 - INFO - thread_id: Consumer_thread_1. Message: Batch saved. Current transaction queue size: 185363. Current db size: 120000
+```

@@ -31,6 +31,7 @@ def mock_config_vars(mocker):
     mocker.patch('src.assignment.ingest.DATABASE_URI', new='some_fake_database_uri')
     mocker.patch("src.assignment.ingest.SAVE_BATCH_LIMIT", new=3)
     mocker.patch('src.assignment.ingest.PRODUCER_THREAD_COUNT', new=PRODUCER_THREAD_COUNT)
+    mocker.patch('src.assignment.ingest.CONSUMER_THREAD_COUNT', new=2)
 
 
 @pytest.fixture
@@ -226,7 +227,8 @@ class TestStart:
                                                   mock_call_api_and_produce, mock_queue, mock_threading_event, mock_consume):
         _, mock_submit = executor_mock
         expected_calls = [
-            mocker.call(mock_consume, mock_queue, mock_threading_event),
+            mocker.call(mock_consume, mock_queue, mock_threading_event, 0),
+            mocker.call(mock_consume, mock_queue, mock_threading_event, 1),
             mocker.call(mock_call_api_and_produce, 'some_default_address', 1, 4, mock_queue, 0),
             mocker.call(mock_call_api_and_produce, 'some_default_address', 5, 8, mock_queue, 1),
         ]
@@ -243,7 +245,7 @@ class TestStart:
         start()
 
         actual_ranges = [
-            (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list[1:] # only the producers
+            (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list[2:] # only the producers
         ]
         assert expected_block_ranges_per_thread == actual_ranges
 
@@ -336,7 +338,7 @@ class TestConsumer():
 
         assert mock_consumer_queue.qsize() == 4
 
-        consume(mock_consumer_queue, producer_event)
+        consume(mock_consumer_queue, producer_event, 1)
 
         assert mock_consumer_queue.qsize() == 0
 
@@ -348,7 +350,7 @@ class TestConsumer():
         producer_event = mocker.Mock()
         producer_event.is_set.return_value = False
 
-        consumer_thread = threading.Thread(target=consume, args=(mock_consumer_queue, producer_event))
+        consumer_thread = threading.Thread(target=consume, args=(mock_consumer_queue, producer_event, 1))
         consumer_thread.start()
 
         for i in range(5):

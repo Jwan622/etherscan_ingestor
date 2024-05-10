@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import queue
 
-from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT,
+from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT, CONSUMER_THREAD_COUNT,
                                    DEV_STEP, SEMAPHOR_THREAD_COUNT, SAVE_BATCH_LIMIT, DEFAULT_ADDRESS, DEV_MODE,
                                    DEV_MODE_ENDING_MULTIPLE, DEV_PRODUCER_THREAD_COUNT, API_RATE_LIMIT_DELAY,
                                    BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS)
@@ -82,9 +82,9 @@ def __get_or_create_address(address):
         session.close()
 
 
-def __save(session, transactions_to_batch):
+def __save(session, transactions_to_batch, thread_id):
     try:
-        logger.info(f"About to save...{len(transactions_to_batch)} records.")
+        __log_with_thread_id(f"About to save... {len(transactions_to_batch)} records.", "Consumer_thread_" + str(thread_id))
         session.bulk_save_objects(transactions_to_batch)
         session.commit()
         transactions_to_batch.clear()
@@ -103,7 +103,7 @@ def __save(session, transactions_to_batch):
                 logger.error(
                     "Existing transaction in database that caused the conflict: {}".format(existing_transaction))
     except Exception as e:
-        logger.error(f"An unexpected error occurred while inserting transactions: {e}")
+        __log_with_thread_id(f"An unexpected error occurred while inserting transactions: {e}", "Consumer_thread_" + str(thread_id))
         session.rollback()
 
 
@@ -173,8 +173,8 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
             f"Reached endblock. current_block: {current_block}, end_block: {ending_block}. Killing thread",
             thread_id)
 
-def consume(transaction_queue, producers_all_done_event):
-    logger.info("CONSUMER STARTING!")
+def consume(transaction_queue, producers_all_done_event, thread_id):
+    __log_with_thread_id("CONSUMER STARTING!", "Consumer_thread_" + str(thread_id))
     session = Session()
     transactions_to_batch = []  # this may not actually improve inserts but it's more for my readability santiy in the logs.
 
@@ -182,7 +182,7 @@ def consume(transaction_queue, producers_all_done_event):
         # run until all producers are done and the queue is empty
         while not producers_all_done_event.is_set() or not transaction_queue.empty():
             try:
-                transaction = transaction_queue.get(timeout=1)
+                transaction = transaction_queue.get(timeout=5)
                 from_address_id = __get_or_create_address(transaction["from"])
                 to_address_id = __get_or_create_address(transaction["to"])
 
@@ -199,24 +199,24 @@ def consume(transaction_queue, producers_all_done_event):
                 )
                 transactions_to_batch.append(transaction)
                 if len(transactions_to_batch) >= SAVE_BATCH_LIMIT:
-                    __save(session, transactions_to_batch)
+                    __save(session, transactions_to_batch, thread_id)
                     transactions_to_batch.clear()
-                    logger.debug(f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}. Current db size: {session.query(Transaction).count()}")
+                    __log_with_thread_id(f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}. Current db size: {session.query(Transaction).count()}", "Consumer_thread_" + str(thread_id))
             except queue.Empty:
                 if producers_all_done_event.is_set():
-                    logger.debug("Producers have finished; no more transactions are expected.")
+                    __log_with_thread_id("Producers have finished; no more transactions are expected.", "Consumer_thread_" + str(thread_id))
                     break
-                logger.debug("Queue is empty, waiting for new transactions...")
+                __log_with_thread_id("Queue is empty, waiting for new transactions...", "Consumer_thread_" + str(thread_id))
                 continue
 
         if transactions_to_batch: # handle any last transactions... say the producers end but the queue is not empty.
-            __save(session, transactions_to_batch)
-            logger.debug(f"Final batch saved. Batch size: {len(transactions_to_batch)}")
+            __save(session, transactions_to_batch, thread_id)
+            __log_with_thread_id(f"Final batch saved. Batch size: {len(transactions_to_batch)}", thread_id)
     except Exception as e:
-        logger.error(f"Consumer shutting down due to error: {e}")
+        __log_with_thread_id(f"Consumer shutting down due to error: {e}", thread_id)
     finally:
         session.close()
-        logger.debug("Session closed and consumer shutdown.")
+        __log_with_thread_id("Session closed and consumer shutdown.", thread_id)
 
 
 @app.command()
@@ -236,6 +236,7 @@ def start():
 
     queue_for_transactions = queue.Queue()
     producers_all_done_event = threading.Event()
+    consumer_futures = []
 
     block_generator = __block_ranges(starting_block, ending_block,
                                      BASE_BLOCK_ATTEMPT if not DEV_MODE else DEV_STEP)
@@ -245,7 +246,8 @@ def start():
         futures = {}
         thread_id = 0
 
-        consumer_future = executor.submit(consume, queue_for_transactions, producers_all_done_event)
+        for consumer_thread_id in range(CONSUMER_THREAD_COUNT):
+            consumer_futures.append(executor.submit(consume, queue_for_transactions, producers_all_done_event, consumer_thread_id))
 
         for _ in range(PRODUCER_THREAD_COUNT):
             try:
@@ -258,7 +260,7 @@ def start():
                 break
 
         while futures:
-            for future in as_completed(futures):
+            for future in as_completed(list(futures.keys())):
                 futures.pop(future)
                 try:
                     new_range = next(block_generator)
@@ -272,7 +274,8 @@ def start():
         producers_all_done_event.set()
         logger.info("All producers have finished producing.")
 
-        consumer_result = consumer_future.result()  # This ensures that the consumer has processed all items
+        for consumer_future in consumer_futures:
+            consumer_result = consumer_future.result()  # This ensures that the consumer has processed all items
         logger.info(f"Consumer has finished processing all items. {consumer_result}")
 
     logger.info("Executor shutdown of consumer and producer complete. Jeff Wan signing off.")
