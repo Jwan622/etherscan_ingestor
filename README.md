@@ -1,14 +1,6 @@
-# Nascent Data Engineer Assignment
+# Etherscan Ingestor
 
-The provided assignment is meant to showcase how you approach a full-stack data engineering project.
-
-### Contact Info
-
-```
-Name: `Jeffrey Wan`
-Email: `Jwan622@gmail.com`
-Github: `Jwan622`
-```
+Let's scrape the etherscan API and getaround their limits.
 
 ## Overview
 
