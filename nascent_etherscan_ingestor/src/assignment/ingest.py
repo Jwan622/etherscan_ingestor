@@ -250,7 +250,7 @@ def start():
 
     with ThreadPoolExecutor(
             max_workers=PRODUCER_THREAD_COUNT if not DEV_MODE else DEV_PRODUCER_THREAD_COUNT) as executor:
-        futures = {}
+        futures = []
         thread_id = 0
 
         for consumer_thread_id in range(CONSUMER_THREAD_COUNT):
@@ -261,21 +261,23 @@ def start():
         for _ in range(PRODUCER_THREAD_COUNT):
             try:
                 new_range = next(block_generator)
-                future = executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
+                futures.append(
+                    executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
                                          queue_for_transactions, thread_id)
-                futures[future] = new_range
+                )
                 thread_id += 1
             except StopIteration:
                 break
 
         while futures:
-            for future in as_completed(list(futures.keys())):
-                futures.pop(future)
+            for future in as_completed(futures):
+                futures.remove(future)
                 try:
                     new_range = next(block_generator)
-                    future = executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
+                    futures.append(
+                        executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
                                              queue_for_transactions, thread_id)
-                    futures[future] = new_range
+                    )
                     thread_id += 1
                 except StopIteration:
                     break
