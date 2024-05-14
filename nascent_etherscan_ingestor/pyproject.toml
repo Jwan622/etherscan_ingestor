@@ -3,8 +3,6 @@ name = "nascent_etherscan_ingestor"
 version = "0.1.0"
 description = "jeff wan takehome for nascent"
 authors = ["Jeffrey <jwan622@gmail.com>"]
-readme = "README.md"
-package-mode = false
 
 [[tool.poetry.packages]]
 include = "assignment"

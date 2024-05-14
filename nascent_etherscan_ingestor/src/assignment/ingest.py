@@ -1,3 +1,5 @@
+from typing import Any
+
 import requests
 import typer
 import threading
@@ -115,7 +117,7 @@ def __block_ranges(start, end, step):
 
 
 @app.command()
-def call_api_and_produce(address: str, starting_block: int, ending_block: int, transaction_queue, thread_id: int):
+def call_api_and_produce(address: str, starting_block: int, ending_block: int, transaction_queue: queue.Queue, thread_id: int) -> Any:
     """
     Ingest data into the database from the API.
     - call_api_and_produce from the api using specific startblock and endblock and an offset of 10000 (the current etherscan limit)
@@ -252,7 +254,9 @@ def start():
         thread_id = 0
 
         for consumer_thread_id in range(CONSUMER_THREAD_COUNT):
-            consumer_futures.append(executor.submit(consume, queue_for_transactions, producers_all_done_event, consumer_thread_id))
+            consumer_futures.append(
+                executor.submit(consume, queue_for_transactions, producers_all_done_event, consumer_thread_id)
+            )
 
         for _ in range(PRODUCER_THREAD_COUNT):
             try:
