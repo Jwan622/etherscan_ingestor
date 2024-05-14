@@ -9,14 +9,13 @@ import queue
 
 from src.assignment.models import Base, Transaction
 
-CONFIG = dotenv_values(".env.test")
 API_KEY = dotenv_values(".env")['API_KEY']
 
 
 class TestIntegrationIngest():
     @pytest.fixture(autouse=True)
     def mock_config_vars(self, mocker):
-        mocker.patch('src.assignment.ingest.CONFIG', new=CONFIG)
+        mocker.patch('src.assignment.ingest.CONFIG', new={})
         mocker.patch("src.assignment.ingest.API_KEY", new=API_KEY)
         mocker.patch('src.assignment.ingest.RECORD_RETRIEVAL_LIMIT', new=100)
         mocker.patch('src.assignment.ingest.DEFAULT_ADDRESS', new='0xE592427A0AEce92De3Edee1F18E0157C05861564')
@@ -32,9 +31,9 @@ class TestIntegrationIngest():
         mocker.patch('src.assignment.ingest.DEV_PRODUCER_THREAD_COUNT', new=4)
         mocker.patch('src.assignment.ingest.DEV_STEP', new=4)
         mocker.patch('src.assignment.ingest.DEV_MODE_ENDING_MULTIPLE', new=25)
-        mocker.patch('src.assignment.ingest.TEST_MODE', new=CONFIG['TEST_MODE'])
-        mocker.patch('src.assignment.ingest.TEST_MODE_STARTING_BLOCK', new=CONFIG['TEST_MODE_STARTING_BLOCK'])
-        mocker.patch('src.assignment.ingest.TEST_MODE_END_BLOCK', new=CONFIG['TEST_MODE_END_BLOCK'])
+        mocker.patch('src.assignment.ingest.TEST_MODE', new=True)
+        mocker.patch('src.assignment.ingest.TEST_MODE_STARTING_BLOCK', new=12375952)
+        mocker.patch('src.assignment.ingest.TEST_MODE_END_BLOCK', new=12375990)
 
 
     @pytest.fixture

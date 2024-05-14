@@ -225,7 +225,7 @@ def consume(transaction_queue, producers_all_done_event, thread_id):
 def start():
     logger.info(f"CONFIG: {CONFIG}")
     data = __call_etherscan(DEFAULT_ADDRESS, sort="asc")
-    starting_block = int(data["result"][0]["blockNumber"]) if not TEST_MODE else int(TEST_MODE_STARTING_BLOCK)
+    starting_block = int(data["result"][0]["blockNumber"]) if not TEST_MODE else TEST_MODE_STARTING_BLOCK
     logger.info(f"Address starting_block: {starting_block}")
 
     if DEV_MODE:
