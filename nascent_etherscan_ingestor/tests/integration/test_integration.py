@@ -6,7 +6,6 @@ from sqlalchemy.pool import StaticPool
 from src.assignment.ingest import start, init_db
 from dotenv import dotenv_values
 import queue
-from pytest_mock import MockerFixture
 
 from src.assignment.models import Base, Transaction
 

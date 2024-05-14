@@ -174,10 +174,11 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
             f"Reached endblock. current_block: {current_block}, end_block: {ending_block}. Killing thread",
             thread_id)
 
+
 def consume(transaction_queue, producers_all_done_event, thread_id):
     __log_with_thread_id("CONSUMER STARTING!", "Consumer_thread_" + str(thread_id))
     session = Session()
-    transactions_to_batch = []  # this may not actually improve inserts but it's more for my readability santiy in the logs.
+    transactions_to_batch = []
 
     try:
         # run until all producers are done and the queue is empty

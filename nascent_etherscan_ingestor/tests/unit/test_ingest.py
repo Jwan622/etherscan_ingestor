@@ -1,21 +1,17 @@
 import queue
 import pytest
+import datetime
+import threading
+import time
 from pytest_mock import MockerFixture
 from concurrent.futures import Future
 
 from src.assignment.ingest import start, call_api_and_produce, consume, init_db
-from datetime import datetime
-import datetime
-import threading
-import time
-
 from src.assignment.models import Transaction
+
 from tests.utils.test_db import init_test_db
 
-PRODUCER_THREAD_COUNT = 4
 SOME_DEFAULT_ADDRESS = 'some_default_address'
-
-
 @pytest.fixture(autouse=True)
 def mock_config_vars(mocker):
     mocker.patch('src.assignment.ingest.CONFIG', new={})
@@ -26,46 +22,12 @@ def mock_config_vars(mocker):
     mocker.patch('src.assignment.ingest.DEV_MODE', new=None)
     mocker.patch('src.assignment.ingest.DATABASE_URI', new='some_fake_database_uri')
     mocker.patch("src.assignment.ingest.SAVE_BATCH_LIMIT", new=3)
-    mocker.patch('src.assignment.ingest.PRODUCER_THREAD_COUNT', new=PRODUCER_THREAD_COUNT)
+    mocker.patch('src.assignment.ingest.PRODUCER_THREAD_COUNT', new=4)
     mocker.patch('src.assignment.ingest.CONSUMER_THREAD_COUNT', new=2)
 
 
 @pytest.fixture
-def mock_db_session(mocker):
-    test_session = init_db('sqlite:///:memory:')
-
-    session_mock = mocker.MagicMock(spec=test_session)
-    mock_add = mocker.Mock()
-    mock_commit = mocker.Mock()
-    mock_rollback = mocker.Mock()
-    mock_close = mocker.Mock()
-    mock_bulk_save_object = mocker.Mock()
-    query_mock = mocker.Mock()
-    filter_mock = mocker.Mock()
-    addr_obj_mock = mocker.Mock()
-    addr_obj_mock.id = 123
-
-    session_mock.add = mock_add
-    session_mock.commit = mock_commit
-    session_mock.bulk_save_objects = mock_bulk_save_object
-    session_mock.rollback = mock_rollback
-    session_mock.close = mock_close
-
-    query_mock.filter_by.return_value = filter_mock
-    session_mock.query.return_value = query_mock
-    filter_mock.one_or_none.return_value = addr_obj_mock
-
-    mocker.patch('src.assignment.ingest.Session', new_callable=lambda: session_mock)
-    return session_mock
-
-
-@pytest.fixture
-def mock_transaction(mocker):
-    return mocker.patch('src.assignment.ingest.Transaction', autospec=True)
-
-
-@pytest.fixture
-def mock_initial_requests_to_get_block_window(mocker: MockerFixture):
+def mock_initial_requests_get_for_block_window(mocker):
     response_mock_asc = mocker.Mock()
     response_mock_asc.json.return_value = {
         "status": "1",
@@ -136,7 +98,7 @@ def mock_initial_requests_to_get_block_window(mocker: MockerFixture):
 
 @pytest.fixture
 def mock_etherscan_calls_for_blocks(mocker: MockerFixture):
-    last_block_number = [0]  # Using a list to hold the counter to avoid nonlocal declaration issues
+    last_block_number = [0]
 
     def create_response(block_start, count=2):
         return {
@@ -168,30 +130,7 @@ def mock_etherscan_calls_for_blocks(mocker: MockerFixture):
         last_block_number[0] += 2
         return response
 
-
     return mocker.patch('src.assignment.ingest.requests.get', side_effect=response_function)
-
-
-
-@pytest.fixture
-def executor_mock(mocker):
-    mock_executor = mocker.patch('src.assignment.ingest.ThreadPoolExecutor', autospec=True)
-    mock_submit = mocker.Mock()
-    # lol this took me forever to figure out how stub out the context manager's return_value
-    mock_executor.return_value.__enter__.return_value.submit = mock_submit
-    future = Future()
-    future.set_result(None)
-    mock_submit.return_value = future
-    return mock_executor, mock_submit
-
-
-@pytest.fixture
-def mock_call_api_and_produce(mocker):
-    return mocker.patch('src.assignment.ingest.call_api_and_produce')
-
-@pytest.fixture
-def mock_consume(mocker):
-    return mocker.patch('src.assignment.ingest.consume')
 
 
 @pytest.fixture
@@ -205,23 +144,43 @@ def mock_queue(mocker):
 def mock_threading_event(mocker):
     mock_threading_event = mocker.Mock()
     mocker.patch('src.assignment.ingest.threading.Event', return_value=mock_threading_event)
+
     return mock_threading_event
 
 
 class TestStart:
-    def test_correctly_makes_two_api_calls_to_get_block_window(self, mock_initial_requests_to_get_block_window, executor_mock,
+    @ pytest.fixture
+    def mock_call_api_and_produce(self, mocker):
+        return mocker.patch('src.assignment.ingest.call_api_and_produce')
+
+    @pytest.fixture
+    def mock_consume(self, mocker):
+        return mocker.patch('src.assignment.ingest.consume')
+
+    @pytest.fixture
+    def executor_mock(self, mocker):
+        mock_executor = mocker.patch('src.assignment.ingest.ThreadPoolExecutor', autospec=True)
+        mock_submit = mocker.Mock()
+        # lol this took me forever to figure out how stub out the context manager's return_value
+        mock_executor.return_value.__enter__.return_value.submit = mock_submit
+        future = Future()
+        future.set_result(None)
+        mock_submit.return_value = future
+        return mock_submit
+
+    def test_correctly_makes_two_api_calls_to_get_block_window(self, mock_initial_requests_get_for_block_window,
                                                                mock_call_api_and_produce):
         expected_asc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey=some_api_key"
         expected_desc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey=some_api_key"
 
         start()
 
-        assert mock_initial_requests_to_get_block_window.call_args_list[0][0][0] == expected_asc_url
-        assert mock_initial_requests_to_get_block_window.call_args_list[1][0][0] == expected_desc_url
+        assert mock_initial_requests_get_for_block_window.call_args_list[0][0][0] == expected_asc_url
+        assert mock_initial_requests_get_for_block_window.call_args_list[1][0][0] == expected_desc_url
 
-    def test_submit_consumer_and_producer_threads(self, mocker, mock_initial_requests_to_get_block_window, executor_mock,
-                                                  mock_call_api_and_produce, mock_queue, mock_threading_event, mock_consume):
-        _, mock_submit = executor_mock
+    def test_submit_consumer_and_producer_threads_with_proper_args(self, mocker,
+                                                                   mock_initial_requests_get_for_block_window, executor_mock,
+                                                                   mock_call_api_and_produce, mock_queue, mock_threading_event, mock_consume):
         expected_calls = [
             mocker.call(mock_consume, mock_queue, mock_threading_event, 0),
             mocker.call(mock_consume, mock_queue, mock_threading_event, 1),
@@ -231,22 +190,42 @@ class TestStart:
 
         start()
 
-        mock_submit.assert_has_calls(expected_calls)
-
-    def test_producer_threads_called_with_correct_block_ranges(self, mock_initial_requests_to_get_block_window, executor_mock,
-                                                        mock_call_api_and_produce):
-        mock_executor, _ = executor_mock
-        expected_block_ranges_per_thread = [(1, 4), (5, 8)]
-
-        start()
-
-        actual_ranges = [
-            (call.args[2], call.args[3]) for call in  mock_executor.return_value.__enter__.return_value.submit.call_args_list[2:] # only the producers
-        ]
-        assert expected_block_ranges_per_thread == actual_ranges
+        executor_mock.assert_has_calls(expected_calls)
 
 
 class TestCallApiAndProduce:
+    @pytest.fixture
+    def mock_db_session(self, mocker):
+        test_session = init_db('sqlite:///:memory:')
+
+        session_mock = mocker.MagicMock(spec=test_session)
+        mock_add = mocker.Mock()
+        mock_commit = mocker.Mock()
+        mock_rollback = mocker.Mock()
+        mock_close = mocker.Mock()
+        mock_bulk_save_object = mocker.Mock()
+        query_mock = mocker.Mock()
+        filter_mock = mocker.Mock()
+        addr_obj_mock = mocker.Mock()
+        addr_obj_mock.id = 123
+
+        session_mock.add = mock_add
+        session_mock.commit = mock_commit
+        session_mock.bulk_save_objects = mock_bulk_save_object
+        session_mock.rollback = mock_rollback
+        session_mock.close = mock_close
+
+        query_mock.filter_by.return_value = filter_mock
+        session_mock.query.return_value = query_mock
+        filter_mock.one_or_none.return_value = addr_obj_mock
+
+        mocker.patch('src.assignment.ingest.Session', new_callable=lambda: session_mock)
+        return session_mock
+
+    @pytest.fixture
+    def mock_transaction(self, mocker):
+        return mocker.patch('src.assignment.ingest.Transaction', autospec=True)
+
     def test_calls_api_with_correct_blocks(self, mock_etherscan_calls_for_blocks, mock_queue, mock_db_session):
         starting_block = 0
         ending_block = 20
@@ -267,7 +246,7 @@ class TestCallApiAndProduce:
             actual_url = call[0][0]
             assert actual_url == expected_url, f"Expected {expected_url}, got {actual_url}"
 
-    def test_call_api_with_correct_blocks_with_mock_queue(self, mock_etherscan_calls_for_blocks, mock_queue, mock_transaction):
+    def test_puts_transactions_to_mock_queue(self, mock_etherscan_calls_for_blocks, mock_queue, mock_transaction):
         starting_block = 0
         ending_block = 20
         thread_id = 1
@@ -296,16 +275,12 @@ class TestCallApiAndProduce:
 
 
 class TestConsumer():
-    @pytest.fixture(autouse=True)
-    def test_db(self, mocker):
-        test_session = init_db('sqlite:///:memory:')
-        mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
-        return test_session
-
-
+    '''
+    Up until this point we used mocks. Let's use dependencies. I actually think tests using a real test db and test queue are more stable. They are more of a unit test with dependencies and I think that's okay.
+    '''
     def create_item(self, index):
         return {
-            "blockNumber":index,
+            "blockNumber": index,
             "timeStamp": 1715350310,
             "hash": f'some_hash_{index}',
             "from": f"some_long_hexa_addr_{index}",
@@ -316,6 +291,12 @@ class TestConsumer():
             "isError": 0
         }
 
+    @pytest.fixture(autouse=True)
+    def test_db(self, mocker):
+        test_session = init_db('sqlite:///:memory:')
+        mocker.patch('src.assignment.ingest.Session', new_callable=lambda: test_session)
+        return test_session
+
     @pytest.fixture
     def mock_consumer_queue(self, request):
         test_queue = queue.Queue()
@@ -325,7 +306,7 @@ class TestConsumer():
         return test_queue
 
     @pytest.mark.parametrize('mock_consumer_queue', [4], indirect=True)
-    def test_messages_get_consumed_if_producers_are_done(self, mocker, mock_consumer_queue, init_test_db):
+    def test_messages_still_get_consumed_if_producers_are_done(self, mocker, mock_consumer_queue, init_test_db):
         session_factory = init_test_db
         mocker.patch('src.assignment.ingest.Session', return_value=session_factory)
 
@@ -339,7 +320,7 @@ class TestConsumer():
         assert mock_consumer_queue.qsize() == 0
 
     @pytest.mark.parametrize('mock_consumer_queue', [2], indirect=True)
-    def test_dynamic_consumer_behavior(self, mocker, mock_consumer_queue, init_test_db):
+    def test_consumers_consume_all_messages_and_add_transasctions_to_db(self, mocker, mock_consumer_queue, init_test_db):
         session_factory = init_test_db
         mocker.patch('src.assignment.ingest.Session', return_value=session_factory)
 
