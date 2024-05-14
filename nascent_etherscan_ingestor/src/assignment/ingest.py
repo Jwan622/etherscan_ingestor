@@ -11,7 +11,7 @@ import queue
 from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT, CONSUMER_THREAD_COUNT,
                                    DEV_STEP, SEMAPHOR_THREAD_COUNT, SAVE_BATCH_LIMIT, DEFAULT_ADDRESS, DEV_MODE,
                                    DEV_MODE_ENDING_MULTIPLE, DEV_PRODUCER_THREAD_COUNT, API_RATE_LIMIT_DELAY,
-                                   BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS)
+                                   BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS, TEST_MODE, TEST_MODE_STARTING_BLOCK, TEST_MODE_END_BLOCK)
 from src.assignment.db import init_db
 from src.assignment.logger import logger
 from src.assignment.models import Address, Transaction
@@ -128,6 +128,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
         while current_block <= ending_block:
             __log_with_thread_id(f"New Loop. current_block: {current_block}, ending_block: {ending_block}", thread_id)
             tentative_end_block = min(current_block + BASE_BLOCK_ATTEMPT, ending_block)
+
             data = __call_etherscan(address, thread_id, startblock=current_block, endblock=tentative_end_block)
 
             if not data["result"]:
@@ -166,7 +167,7 @@ def call_api_and_produce(address: str, starting_block: int, ending_block: int, t
                 block_window_amount = BASE_BLOCK_ATTEMPT
 
     except Exception as e:
-        logger.error(f"Failed to call_api_and_produce data: {e}")
+        logger.error(f"Failed inside call_api_and_produce data with error: {e}")
         raise
     finally:
         __log_with_thread_id(
@@ -223,12 +224,15 @@ def consume(transaction_queue, producers_all_done_event, thread_id):
 def start():
     logger.info(f"CONFIG: {CONFIG}")
     data = __call_etherscan(DEFAULT_ADDRESS, sort="asc")
-    starting_block = int(data["result"][0]["blockNumber"])
+    starting_block = int(data["result"][0]["blockNumber"]) if not TEST_MODE else int(TEST_MODE_STARTING_BLOCK)
     logger.info(f"Address starting_block: {starting_block}")
 
     if DEV_MODE:
-        logger.info("IN DEV MODE, FAKE END BLOCK")
+        logger.info("IN DEV MODE, CONTRIVED END BLOCK")
         ending_block = starting_block + DEV_PRODUCER_THREAD_COUNT * DEV_MODE_ENDING_MULTIPLE
+    elif TEST_MODE:
+        logger.info("IN TEST MODE, CONTRIVED END BLOCK")
+        ending_block = int(TEST_MODE_END_BLOCK)
     else:
         data = __call_etherscan(DEFAULT_ADDRESS, sort="desc")
         ending_block = int(data["result"][0]["blockNumber"])
@@ -279,6 +283,7 @@ def start():
         logger.info(f"Consumer has finished processing all items. {consumer_result}")
 
     logger.info("Executor shutdown of consumer and producer complete. Jeff Wan signing off.")
+
 
 if __name__ == "__main__":
     start()

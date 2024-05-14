@@ -3,10 +3,6 @@ import pytest
 from pytest_mock import MockerFixture
 from concurrent.futures import Future
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from src.assignment.ingest import start, call_api_and_produce, consume, init_db
 from datetime import datetime
 import datetime
