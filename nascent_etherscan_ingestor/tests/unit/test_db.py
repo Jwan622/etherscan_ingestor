@@ -18,9 +18,9 @@ def mock_create_all(mocker):
 @pytest.fixture
 def mock_session(mocker):
     mock_session = mocker.Mock()
-    mocker.patch('src.assignment.db.scoped_session', return_value=mock_session)
+    mock_scoped_session = mocker.patch('src.assignment.db.scoped_session', return_value=mock_session)
 
-    return mock_session
+    return mock_session, mock_scoped_session
 
 
 def test_init_db_creates_engine_and_tables(mock_create_engine, mock_create_all):
@@ -33,10 +33,21 @@ def test_init_db_creates_engine_and_tables(mock_create_engine, mock_create_all):
     mock_create_all.assert_called_once_with(mock_created_engine)
 
 
-def test_init_db_returns_session(mock_create_engine, mock_create_all, mock_session):
+def test_init_db_returns_scoped_session(mock_create_engine, mock_create_all, mock_session):
     test_url = 'test_url'
-    expected = mock_session
+    expected, _ = mock_session
 
     actual = init_db(test_url)
 
     assert actual == expected
+
+
+def test_scoped_session_called(mocker, mock_session, mock_create_engine):
+    mock_session_maker_return = mocker.Mock()
+    mocker.patch('src.assignment.db.sessionmaker', return_value=mock_session_maker_return)
+    _, mock_scoped_session = mock_session
+    test_url = 'test_url'
+
+    init_db(test_url)
+
+    mock_scoped_session.assert_called_once_with(mock_session_maker_return)
