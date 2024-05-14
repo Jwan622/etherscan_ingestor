@@ -3,15 +3,15 @@ import typer
 import threading
 import re
 import time
+import queue
 from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import queue
-
-from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT, CONSUMER_THREAD_COUNT,
-                                   DEV_STEP, SEMAPHOR_THREAD_COUNT, SAVE_BATCH_LIMIT, DEFAULT_ADDRESS, DEV_MODE,
-                                   DEV_MODE_ENDING_MULTIPLE, DEV_PRODUCER_THREAD_COUNT, API_RATE_LIMIT_DELAY,
-                                   BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS, TEST_MODE, TEST_MODE_STARTING_BLOCK, TEST_MODE_END_BLOCK)
+from src.assignment.config import (CONFIG, RECORD_RETRIEVAL_LIMIT, API_KEY, PRODUCER_THREAD_COUNT,
+                                   CONSUMER_THREAD_COUNT, DEV_STEP, SEMAPHOR_THREAD_COUNT, SAVE_BATCH_LIMIT,
+                                   DEFAULT_ADDRESS, DEV_MODE, DEV_MODE_ENDING_MULTIPLE, DEV_PRODUCER_THREAD_COUNT,
+                                   API_RATE_LIMIT_DELAY, BASE_BLOCK_ATTEMPT, BLOCK_ATTEMPTS, TEST_MODE,
+                                   TEST_MODE_STARTING_BLOCK, TEST_MODE_END_BLOCK)
 from src.assignment.db import init_db
 from src.assignment.logger import logger
 from src.assignment.models import Address, Transaction
@@ -103,7 +103,8 @@ def __save(session, transactions_to_batch, thread_id):
                 logger.error(
                     "Existing transaction in database that caused the conflict: {}".format(existing_transaction))
     except Exception as e:
-        __log_with_thread_id(f"An unexpected error occurred while inserting transactions: {e}", "Consumer_thread_" + str(thread_id))
+        __log_with_thread_id(f"An unexpected error occurred while inserting transactions: {e}",
+                             "Consumer_thread_" + str(thread_id))
         session.rollback()
 
 
@@ -117,43 +118,55 @@ def __block_ranges(start, end, step):
 def call_api_and_produce(address, starting_block, ending_block, transaction_queue, thread_id):
     """
     Ingest data into the database from the API.
-    - call_api_and_produce from the api using specific startblock and endblock and an offset of 10000 (the current etherscan limit)
-    - if the records are 10000 or more (a sign that there are more than 10000 records in between the startblock and the endblock), we dynmically reduce the endblock
+    - call_api_and_produce from the api using specific startblock and endblock and an offset of 10000
+    (the current etherscan limit)
+    - if the records are 10000 or more (a sign that there are more than 10000 records in between the
+    startblock and the endblock), we dynamically reduce the endblock
     - if fewer than 10000 records, we batch and save to database
     """
     current_block = starting_block
     block_window_amount = BASE_BLOCK_ATTEMPT if not DEV_MODE else DEV_STEP
     try:
         while current_block <= ending_block:
-            __log_with_thread_id(f"New Loop. current_block: {current_block}, ending_block: {ending_block}", thread_id)
+            __log_with_thread_id(
+                f"New Loop. current_block: {current_block}, ending_block: {ending_block}", thread_id
+            )
             tentative_end_block = min(current_block + BASE_BLOCK_ATTEMPT, ending_block)
 
             data = __call_etherscan(address, thread_id, startblock=current_block, endblock=tentative_end_block)
 
             if not data["result"]:
                 __log_with_thread_id(
-                    f"No transactions found for address: {address}, current_block: {current_block}, ending_block: {tentative_end_block}",
-                    thread_id)
+                    f"No transactions found for address: {address}, current_block: {current_block}, "
+                    f"ending_block: {tentative_end_block}",
+                    thread_id
+                )
                 current_block = tentative_end_block + 1
                 continue
 
             block_attempt_index = 0
 
-            while len(data.get("result", [])) >= RECORD_RETRIEVAL_LIMIT:
+            while len(data.get("result", [])) >= RECORD_RETRIEVAL_LIMIT:  # should really never be > but just in case...
                 __log_with_thread_id(
-                    f"Retrieved too many records with {block_window_amount}. Retrieved {len(data.get("result", []))} records.",
-                    thread_id)
+                    f"Retrieved too many records with {block_window_amount}. "
+                    f"Retrieved {len(data.get("result", []))} records.",
+                    thread_id
+                )
                 block_window_amount = BLOCK_ATTEMPTS[block_attempt_index] if block_attempt_index < len(
                     BLOCK_ATTEMPTS) else 20
                 tentative_end_block = min(current_block + block_window_amount, ending_block)
                 __log_with_thread_id(
-                    f"Adjusting block range to {block_window_amount}, new end block: {tentative_end_block}", thread_id)
+                    f"Adjusting block range to {block_window_amount}, new end block: {tentative_end_block}",
+                    thread_id
+                )
                 data = __call_etherscan(address, thread_id, startblock=current_block, endblock=tentative_end_block)
                 block_attempt_index += 1
 
             __log_with_thread_id(
-                f"Etherscan API call SUCCESS! Retrieved {len(data['result'])} records with a block window size of {block_window_amount}",
-                thread_id)
+                f"Etherscan API call SUCCESS! Retrieved {len(data['result'])} records with a block window "
+                f"size of {block_window_amount}",
+                thread_id
+            )
 
             for tx in data["result"]:
                 if int(tx["value"]) > 0 and tx["isError"] != "1":
@@ -202,15 +215,23 @@ def consume(transaction_queue, producers_all_done_event, thread_id):
                 if len(transactions_to_batch) >= SAVE_BATCH_LIMIT:
                     __save(session, transactions_to_batch, thread_id)
                     transactions_to_batch.clear()
-                    __log_with_thread_id(f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}. Current db size: {session.query(Transaction).count()}", "Consumer_thread_" + str(thread_id))
+                    __log_with_thread_id(
+                        f"Batch saved. Current transaction queue size: {transaction_queue.qsize()}. "
+                        f"Current db size: {session.query(Transaction).count()}",
+                        "Consumer_thread_" + str(thread_id)
+                    )
             except queue.Empty:
                 if producers_all_done_event.is_set():
-                    __log_with_thread_id("Producers have finished; no more transactions are expected.", "Consumer_thread_" + str(thread_id))
+                    __log_with_thread_id("Producers have finished; no more transactions "
+                                         "are expected.", "Consumer_thread_" + str(thread_id)
+                                         )
                     break
-                __log_with_thread_id("Queue is empty, waiting for new transactions...", "Consumer_thread_" + str(thread_id))
+                __log_with_thread_id(
+                    "Queue is empty, waiting for new transactions...", "Consumer_thread_" + str(thread_id)
+                )
                 continue
 
-        if transactions_to_batch: # handle any last transactions... say the producers end but the queue is not empty.
+        if transactions_to_batch:  # handle any last transactions... say the producers end but the queue is not empty.
             __save(session, transactions_to_batch, thread_id)
             __log_with_thread_id(f"Final batch saved. Batch size: {len(transactions_to_batch)}", thread_id)
     except Exception as e:
@@ -259,8 +280,8 @@ def start():
             try:
                 new_range = next(block_generator)
                 futures.append(
-                    executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
-                                         queue_for_transactions, thread_id)
+                    executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range, queue_for_transactions,
+                                    thread_id)
                 )
                 thread_id += 1
             except StopIteration:
@@ -272,8 +293,8 @@ def start():
                 try:
                     new_range = next(block_generator)
                     futures.append(
-                        executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range,
-                                             queue_for_transactions, thread_id)
+                        executor.submit(call_api_and_produce, DEFAULT_ADDRESS, *new_range, queue_for_transactions,
+                                        thread_id)
                     )
                     thread_id += 1
                 except StopIteration:

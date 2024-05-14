@@ -8,4 +8,3 @@ file_handler = logging.FileHandler('thread_errors.log')
 file_handler.setLevel(logging.ERROR)
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
-
