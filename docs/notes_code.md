@@ -123,3 +123,28 @@ DETAIL:  Key (hash)=(0xc9c50c8d403dfe2545e467a2015d7b6311a9c26d3ab84c1985ec76de7
 
 I think I understand what is happening. Wrote about this in [docs/notes_api.md](notes_api.md)
 
+
+## Queue class
+
+What does the `timeout=<time>` do?
+
+Remove and return an item from the queue. If optional args block is true and timeout is None (the default), block if necessary until an item is available. If timeout is a positive number, it blocks at most timeout seconds and raises the Empty exception if no item was available within that time. Basically, we also need it to throw an error so that we can shutdown when the time comes (no more messages and the producers are done producing)
+
+
+## Thread safety
+
+Thread Safety: Ensures that an object or code behaves correctly when accessed by multiple threads concurrently, preventing race conditions and data corruption.
+
+Thread-Safe Queue: A queue that can be safely used by multiple threads, with internal locking mechanisms to manage access and ensure atomic operations.
+
+Thread-Safe Session: A session object that can be shared and used by multiple threads, often managed using thread-safe connection pools in the context of databases.
+
+### Thread-Safe Queue
+A thread-safe queue is a queue that can be safely used by multiple threads concurrently. The queue.Queue class in Python's queue module is an example of a thread-safe queue. It uses internal locks to ensure that only one thread can access or modify the queue at a time. This prevents race conditions and ensures data integrity.
+
+#### Key Properties of Thread-Safe Queue
+Atomic Operations: Methods like put and get are atomic, meaning they are completed in a single step without being interrupted. This ensures that concurrent operations do not interfere with each other.
+
+Locks: Internal locking mechanisms (like mutexes) are used to manage access to the queue, ensuring that only one thread can perform operations on it at a time.
+
+Blocking Methods: The Queue class provides methods like put and get with optional blocking behavior, allowing threads to wait for an item to be added or removed.

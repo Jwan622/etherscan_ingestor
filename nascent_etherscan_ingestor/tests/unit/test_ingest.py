@@ -333,7 +333,7 @@ class TestConsumer():
         for i in range(5):
             mock_consumer_queue.put(self.create_item(i))
 
-        time.sleep(0.2)  # Simulate time delay for real-time transaction processing
+        time.sleep(0.1)  # Simulate time delay for real-time transaction processing
         producer_event.is_set.return_value = True
 
         consumer_thread.join()
