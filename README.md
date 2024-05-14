@@ -1,6 +1,6 @@
 # Etherscan Ingestor
 
-Let's scrape the etherscan API and getaround their limits.
+Let's scrape the etherscan API and getaround their rate limiting.
 
 ## Overview
 
