@@ -169,7 +169,7 @@ class TestStart:
         return mock_submit
 
     def test_correctly_makes_two_api_calls_to_get_block_window(self, mock_initial_requests_get_for_block_window,
-                                                               mock_call_api_and_produce):
+                                                               mock_call_api_and_produce, mock_consume):
         expected_asc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=asc&apikey=some_api_key"
         expected_desc_url = "https://api.etherscan.io/api?module=account&action=txlistinternal&address=some_default_address&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey=some_api_key"
 
