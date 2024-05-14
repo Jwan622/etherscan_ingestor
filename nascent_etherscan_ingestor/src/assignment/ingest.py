@@ -114,7 +114,6 @@ def __block_ranges(start, end, step):
         current += step
 
 
-@app.command()
 def call_api_and_produce(address, starting_block, ending_block, transaction_queue, thread_id):
     """
     Ingest data into the database from the API.

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
 echo "Running solution..."
-poetry run start
+poetry run python -m src.assignment.ingest start
