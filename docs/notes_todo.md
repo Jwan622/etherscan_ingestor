@@ -20,11 +20,12 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [x] modularize the ingest file. too big. so many concerns.
 - [x] mock out the ingestor to test the crawl and ingest command
 - [x] mock out the threadcontextmanager in the crawl and ingest test
-- [ ] write integration test, end to end starting with the click/typer command. and then inspecting the state of the database. I guess you still have to mockout the etherscan request here.
+- [x] write integration test, end to end starting with the click/typer command. and then inspecting the state of the database. I guess you still have to mockout the etherscan request here.
+- [x] my divide and conquer approach is inefficient because some block windows are hot spots whereas others are not. You can actually see this in the frontend aggregated view! There are some days with much larger amounts of transactions than others so... some Threads finish super quickly while others take too long. We should constantly be dividing and conquering the block windows. That's MVP2. (edit, we implemented a queue to solve producer and consumer problem and we are now using the thread pool more efficiently by giving threads smaller slices and adding new threads when a thread completes a block window.)
 - [ ] build a matlibplot or some pandas just because.
 - [ ] implement crawling for more addresses to query. create a queue (a table is fine maybe with `queued` and `visited` columns) for all the from_addresses and to_addresses you see. Sort of like web crawling.
-- [ ] my divide and conquer approach is inefficient because some block windows are hot spots whereas others are not. You can actually see this in the frontend aggregated view! There are some days with much larger amounts of transactions than others so... some Threads finish super quickly while others take too long. We should constantly be dividing and conquering the block windows. That's MVP2.
 - [ ] build a way to provide a timestamp and ingest records after that timestamp (this would be great for an orchestrator like Airflow)
+- [ ] using asyncio library instead of threads. Use aiolimiter to rate limit properly to the api instead of using `time.sleep(0.1`
 
 
 ## Todo for frontend
@@ -36,9 +37,9 @@ This is my todo list for this project. I have some Todos for mvp2.
 - [x] fix  timestamp bug. write a test to check that timestamp in database the same as timestamp on page.
 - [x] display the address that we're focusing on in the header
 - [x] write basic frontend tests that at least show you can do it lol. mock out axios.
+- [x] you need to write some frontend tests that involve interaction. Setup a test db and then click around the web
 - [ ] some graphical libraries. chart.js?
 - [ ] caching in the server using redis, cache on address and datetime/timestamp. invalidate cache when it holds too many records FIFO style.
-- [ ] you need to write some frontend tests that involve interaction. Setup a test db and then click around the web
 
 ## Todo General
 - [ ] docker compose everything.
